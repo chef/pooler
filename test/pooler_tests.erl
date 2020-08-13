@@ -406,7 +406,7 @@ basic_tests() ->
 
       {"utilization returns sane results",
        fun() ->
-               #pool{max_count = MaxCount, queue_max = QueueMax} = Pool = sys:get_state(test_pool_1),
+               #pool{max_count = MaxCount, queue_max = QueueMax} = sys:get_state(test_pool_1),
 
                ?assertEqual(MaxCount, ?gv(max_count, pooler:pool_utilization(test_pool_1))),
                ?assertEqual(0, ?gv(in_use_count, pooler:pool_utilization(test_pool_1))),
@@ -1012,6 +1012,58 @@ pooler_integration_test_() ->
      ]
     }.
 
+pooler_bug_test_() ->
+    {foreach,
+     %setup
+     fun() ->
+             Pools = [[{name, test_pool_1},
+                       {max_count, 3},
+                       {init_count, 3},
+                       {start_mfa,
+                        {pooled_gs, start_link, [{"type-0"}]}}]],
+             application:set_env(pooler, pools, Pools),
+             error_logger:delete_report_handler(error_logger_tty_h),
+             application:start(pooler)
+     end,
+     %cleanup
+     fun(_) ->
+             application:stop(pooler)
+     end,
+
+     [
+      fun(_) ->
+              fun() ->
+                  % Create a bad Pid
+
+                  BadPid = erlang:spawn(fun() -> ok end),
+                  % Add Pid to existing state as a free pid
+                  % Update the allmembers dictionary
+                  % Update the number for free_count and max_count
+
+                  sys:replace_state(test_pool_1,
+                                    fun(#pool{free_count = FreeCount,
+                                              max_count = MaxCount,
+                                              all_members = AllMembers,
+                                              free_pids = FreePids} = OldState) -> 
+                                                  OldState#pool{free_count = FreeCount + 1,
+                                                                max_count = MaxCount + 1,
+                                                                all_members = dict:store(BadPid, {erlang:make_ref(), free, os:timestamp()}, AllMembers),
+                                                                free_pids = [BadPid | FreePids]
+                                                               }
+                                    end),
+                  % take_member should be same as bad Pid
+                  BadPid = pooler:take_member(test_pool_1),
+                  % return member
+                  pooler:return_member(test_pool_1, BadPid),
+                  % Assert that bad pid not a part of the free_pids in the state.
+                  State = sys:get_state(test_pool_1),
+                  FreePids = State#pool.free_pids,
+                  ?assertNot(lists:member(BadPid, FreePids))
+              end
+       end
+     ]
+    }.
+
 pooler_auto_grow_disabled_by_default_test_() ->
     {setup,
      fun() ->
@@ -1152,7 +1204,7 @@ no_error_logger_reports_after_culling_test_() ->
                error_logger:delete_report_handler(error_logger_pooler_h),
                ok = application:stop(pooler),
                ?assertEqual(killed, Reason),
-               ?assertEqual(1, error_logger_mon:get_msg_count())
+               ?assertEqual(4, error_logger_mon:get_msg_count())
        end},
       {"Default MFA shouldn't generate any reports during culling",
        fun() ->
@@ -1162,7 +1214,7 @@ no_error_logger_reports_after_culling_test_() ->
                error_logger:delete_report_handler(error_logger_pooler_h),
                ok = application:stop(pooler),
                ?assertEqual(killed, Reason),
-               ?assertEqual(0, error_logger_mon:get_msg_count())
+               ?assertEqual(3, error_logger_mon:get_msg_count())
        end}
      ]}.
 
