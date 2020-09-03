@@ -677,7 +677,6 @@ do_return_member(Pid, ok, #pool{name = PoolName,
                     Pool2 = Pool1#pool{all_members = store_all_members(Pid, Entry, AllMembers),
                                consumer_to_pid = cpmap_remove(Pid, CPid,
                                                               Pool1#pool.consumer_to_pid)},
-                    error_logger:info_msg("Pid ~p added to pool ~p", [Pid, Pool2]),
                     case queue:out(QueuedRequestors) of
                         {empty, _ } ->
                             Pool2#pool{free_pids = [Pid | Free], free_count = NumFree + 1};
@@ -685,13 +684,11 @@ do_return_member(Pid, ok, #pool{name = PoolName,
                             reply_to_queued_requestor(TRef, Pid, From, NewQueuedRequestors, Pool2)
                     end;
                 false ->
+                    error_logger:info_msg("pool '~s': removing dead member ~p (consumer: ~p) from pool", [PoolName, Pid, CPid]),
                     Pool1 = remove_pid(Pid, Pool),
-                    error_logger:info_msg("Pid ~p is dead hence removed removed from the pool ~p", [Pid, CPid, Pool1]),
-                    error_logger:info_msg("It was attached to consumer ~p", [CPid]),
                     add_members_async(1, Pool1)
             end;
         error ->
-            error_logger:error_msg("Error in returning Pid ~p to Pool ~p", [Pid, Pool]),
             Pool
     end;
 do_return_member(Pid, fail, #pool{all_members = AllMembers} = Pool) ->

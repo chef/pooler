@@ -1044,7 +1044,7 @@ pooler_bug_test_() ->
                                     fun(#pool{free_count = FreeCount,
                                               max_count = MaxCount,
                                               all_members = AllMembers,
-                                              free_pids = FreePids} = OldState) -> 
+                                              free_pids = FreePids} = OldState) ->
                                                   OldState#pool{free_count = FreeCount + 1,
                                                                 max_count = MaxCount + 1,
                                                                 all_members = dict:store(BadPid, {erlang:make_ref(), free, os:timestamp()}, AllMembers),
@@ -1204,7 +1204,7 @@ no_error_logger_reports_after_culling_test_() ->
                error_logger:delete_report_handler(error_logger_pooler_h),
                ok = application:stop(pooler),
                ?assertEqual(killed, Reason),
-               ?assertEqual(4, error_logger_mon:get_msg_count())
+               ?assertEqual(1, error_logger_mon:get_msg_count())
        end},
       {"Default MFA shouldn't generate any reports during culling",
        fun() ->
@@ -1214,7 +1214,7 @@ no_error_logger_reports_after_culling_test_() ->
                error_logger:delete_report_handler(error_logger_pooler_h),
                ok = application:stop(pooler),
                ?assertEqual(killed, Reason),
-               ?assertEqual(3, error_logger_mon:get_msg_count())
+               ?assertEqual(0, error_logger_mon:get_msg_count())
        end}
      ]}.
 
