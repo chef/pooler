@@ -392,8 +392,11 @@ handle_info(timeout, #pool{group = Group} = Pool) ->
 handle_info({'DOWN', MRef, process, Pid, Reason}, State) ->
     State1 =
         case dict:find(Pid, State#pool.all_members) of
+            %% The process that has gone down is a known member of the pool
             {ok, {_PoolName, _ConsumerPid, _Time}} ->
                 do_return_member(Pid, fail, State);
+            %% The process that has gone down is not a known member of the pool
+            %% hence check if the process is a consumer of the pool.
             error ->
                 case dict:find(Pid, State#pool.consumer_to_pid) of
                     {ok, {MRef, Pids}} ->
@@ -662,19 +665,28 @@ do_return_member(Pid, ok, #pool{name = PoolName,
             Fmt = "pool '~s': ignored return of free member ~p",
             error_logger:warning_msg(Fmt, [PoolName, Pid]),
             Pool;
+        %% Connection Pid is attached to a consumer process.
         {ok, {MRef, CPid, _}} ->
-            #pool{free_pids = Free, in_use_count = NumInUse,
-                  free_count = NumFree} = Pool,
-            Pool1 = Pool#pool{in_use_count = NumInUse - 1},
-            Entry = {MRef, free, os:timestamp()},
-            Pool2 = Pool1#pool{all_members = store_all_members(Pid, Entry, AllMembers),
-                       consumer_to_pid = cpmap_remove(Pid, CPid,
-                                                      Pool1#pool.consumer_to_pid)},
-            case queue:out(QueuedRequestors) of
-                {empty, _ } ->
-                    Pool2#pool{free_pids = [Pid | Free], free_count = NumFree + 1};
-                {{value, {From = {APid, _}, TRef}}, NewQueuedRequestors} when is_pid(APid) ->
-                    reply_to_queued_requestor(TRef, Pid, From, NewQueuedRequestors, Pool2)
+            %% check if the member is alive before returning it.
+            case is_process_alive(Pid) of
+                true ->
+                    #pool{free_pids = Free, in_use_count = NumInUse,
+                      free_count = NumFree} = Pool,
+                    Pool1 = Pool#pool{in_use_count = NumInUse - 1},
+                    Entry = {MRef, free, os:timestamp()},
+                    Pool2 = Pool1#pool{all_members = store_all_members(Pid, Entry, AllMembers),
+                               consumer_to_pid = cpmap_remove(Pid, CPid,
+                                                              Pool1#pool.consumer_to_pid)},
+                    case queue:out(QueuedRequestors) of
+                        {empty, _ } ->
+                            Pool2#pool{free_pids = [Pid | Free], free_count = NumFree + 1};
+                        {{value, {From = {APid, _}, TRef}}, NewQueuedRequestors} when is_pid(APid) ->
+                            reply_to_queued_requestor(TRef, Pid, From, NewQueuedRequestors, Pool2)
+                    end;
+                false ->
+                    error_logger:info_msg("pool '~s': removing dead member ~p (consumer: ~p) from pool", [PoolName, Pid, CPid]),
+                    Pool1 = remove_pid(Pid, Pool),
+                    add_members_async(1, Pool1)
             end;
         error ->
             Pool
