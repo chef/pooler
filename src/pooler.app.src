@@ -1,6 +1,6 @@
 {application, pooler,
  [
-  {description, ""},
+  {description, "pooler"},
   {vsn, git},
   {registered, []},
   {applications, [

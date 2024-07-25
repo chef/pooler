@@ -146,13 +146,13 @@ rm_pool(PoolName) ->
 %%
 -spec rm_group(atom()) -> ok | {error, {failed_rm_pools, [atom()]}}.
 rm_group(GroupName) ->
-    case pg2:get_local_members(GroupName) of
-        {error, {no_such_group, GroupName}} ->
+    case pg:get_local_members(GroupName) of
+        [] ->
             ok;
         Pools ->
             case rm_group_members(Pools) of
                 [] ->
-                    pg2:delete(GroupName);
+                    ok;
                 Failures ->
                     {error, {failed_rm_pools, Failures}}
             end
@@ -210,9 +210,7 @@ take_member(PoolName, Timeout) when is_atom(PoolName) orelse is_pid(PoolName) ->
 %% in the group are tried in order.
 -spec take_group_member(atom()) -> pid() | error_no_members | {error_no_group, atom()}.
 take_group_member(GroupName) ->
-    case pg2:get_local_members(GroupName) of
-        {error, {no_such_group, GroupName}} ->
-            {error_no_group, GroupName};
+    case pg:get_local_members(GroupName) of
         [] ->
             error_no_members;
         Pools ->
@@ -341,7 +339,7 @@ init(#pool{}=Pool) ->
     Pool2 = cull_members_from_pool(Pool1),
     {ok, NewPool} = init_members_sync(N, Pool2),
     %% trigger an immediate timeout, handled by handle_info to allow
-    %% us to register with pg2. We use the timeout mechanism to ensure
+    %% us to register with pg. We use the timeout mechanism to ensure
     %% that a server is added to a group only when it is ready to
     %% process messages.
     {ok, NewPool, 0}.
@@ -386,8 +384,7 @@ handle_info(timeout, #pool{group = undefined} = Pool) ->
     %% ignore
     {noreply, Pool};
 handle_info(timeout, #pool{group = Group} = Pool) ->
-    ok = pg2:create(Group),
-    ok = pg2:join(Group, self()),
+    ok = pg:join(Group, self()),
     {noreply, Pool};
 handle_info({'DOWN', MRef, process, Pid, Reason}, State) ->
     State1 =
