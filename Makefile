@@ -32,5 +32,5 @@ REBAR_URL = https://s3.amazonaws.com/rebar3/rebar3
 
 ./rebar3:
 	@echo "Fetching rebar3 from $(REBAR_URL)"
-	@erl -noinput -noshell -s inets -s ssl  -eval '{ok, _} = httpc:request(get, {"${REBAR_URL}", []}, [], [{stream, "${REBAR}"}])' -s init stop
+	@erl -noinput -noshell -s inets -s ssl  -eval '{ok, _} = httpc:request(get, {"${REBAR_URL}", []}, [{ssl, [{verify, verify_none}]}], [{stream, "${REBAR}"}])' -s init stop
 		chmod +x ${REBAR}

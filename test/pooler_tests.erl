@@ -450,12 +450,12 @@ pooler_groups_test_() ->
                      ],
              application:set_env(pooler, pools, Pools),
              %% error_logger:delete_report_handler(error_logger_tty_h),
-             pg2:start(),
+             pg:start(pg),
              application:start(pooler)
      end,
      fun(_X) ->
              application:stop(pooler),
-             application:stop(pg2)
+             application:stop(pg)
      end,
      [
       {"take and return one group member (repeated)",
@@ -476,7 +476,7 @@ pooler_groups_test_() ->
 
       {"take member from unknown group",
        fun() ->
-               ?assertEqual({error_no_group, not_a_group},
+               ?assertEqual(error_no_members,
                             pooler:take_group_member(not_a_group))
        end},
 
@@ -500,7 +500,7 @@ pooler_groups_test_() ->
       {"take member from empty group",
        fun() ->
                %% artificially empty group member list
-               [ pg2:leave(group_1, M) || M <- pg2:get_members(group_1) ],
+               pg:leave(group_1, pg:get_members(group_1)),
                ?assertEqual(error_no_members, pooler:take_group_member(group_1))
        end},
 
@@ -545,8 +545,7 @@ pooler_groups_test_() ->
 
                ?assertExit({noproc, _}, pooler:take_member(test_pool_1)),
                ?assertExit({noproc, _}, pooler:take_member(test_pool_2)),
-               ?assertEqual({error_no_group, group_1},
-                            pooler:take_group_member(group_1))
+               ?assertEqual(error_no_members, pooler:take_group_member(group_1))
        end},
 
       {"rm_group with existing non-empty group",
@@ -569,8 +568,7 @@ pooler_groups_test_() ->
 
                ?assertExit({noproc, _}, pooler:take_member(test_pool_1)),
                ?assertExit({noproc, _}, pooler:take_member(test_pool_2)),
-               ?assertEqual({error_no_group, group_1},
-                            pooler:take_group_member(group_1))
+               ?assertEqual(error_no_members, pooler:take_group_member(group_1))
        end}
      ]}}.
 
