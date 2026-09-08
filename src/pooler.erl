@@ -357,7 +357,7 @@ handle_call({accept_member, Pid}, _From, Pool) ->
 handle_call(stop, _From, Pool) ->
     {stop, normal, stop_ok, Pool};
 handle_call(pool_stats, _From, Pool) ->
-    {reply, dict:to_list(Pool#pool.all_members), Pool};
+    {reply, maps:to_list(Pool#pool.all_members), Pool};
 handle_call(pool_utilization, _From, Pool) ->
     {reply, compute_utilization(Pool), Pool};
 handle_call(dump_pool, _From, Pool) ->
@@ -388,14 +388,14 @@ handle_info(timeout, #pool{group = Group} = Pool) ->
     {noreply, Pool};
 handle_info({'DOWN', MRef, process, Pid, Reason}, State) ->
     State1 =
-        case dict:find(Pid, State#pool.all_members) of
+        case maps:find(Pid, State#pool.all_members) of
             %% The process that has gone down is a known member of the pool
             {ok, {_PoolName, _ConsumerPid, _Time}} ->
                 do_return_member(Pid, fail, State);
             %% The process that has gone down is not a known member of the pool
             %% hence check if the process is a consumer of the pool.
             error ->
-                case dict:find(Pid, State#pool.consumer_to_pid) of
+                case maps:find(Pid, State#pool.consumer_to_pid) of
                     {ok, {MRef, Pids}} ->
                         IsOk = case Reason of
                                    normal -> ok;
@@ -657,7 +657,7 @@ do_return_member(Pid, ok, #pool{name = PoolName,
                                 all_members = AllMembers,
                                 queued_requestors = QueuedRequestors} = Pool) ->
     clean_group_table(Pid, Pool),
-    case dict:find(Pid, AllMembers) of
+    case maps:find(Pid, AllMembers) of
         {ok, {_, free, _}} ->
             Fmt = "pool '~s': ignored return of free member ~p",
             error_logger:warning_msg(Fmt, [PoolName, Pid]),
@@ -692,7 +692,7 @@ do_return_member(Pid, fail, #pool{all_members = AllMembers} = Pool) ->
     % for the fail case, perhaps the member crashed and was alerady
     % removed, so use find instead of fetch and ignore missing.
     clean_group_table(Pid, Pool),
-    case dict:find(Pid, AllMembers) of
+    case maps:find(Pid, AllMembers) of
         {ok, {_MRef, _, _}} ->
             Pool1 = remove_pid(Pid, Pool),
             add_members_async(1, Pool1);
@@ -715,16 +715,16 @@ clean_group_table(MemberPid, #pool{group = _GroupName}) ->
 cpmap_remove(_Pid, free, CPMap) ->
     CPMap;
 cpmap_remove(Pid, CPid, CPMap) ->
-    case dict:find(CPid, CPMap) of
+    case maps:find(CPid, CPMap) of
         {ok, {MRef, Pids0}} ->
             Pids1 = lists:delete(Pid, Pids0),
             case Pids1 of
                 [_H|_T] ->
-                    dict:store(CPid, {MRef, Pids1}, CPMap);
+                    maps:put(CPid, {MRef, Pids1}, CPMap);
                 [] ->
                     %% no more members for this consumer
                     erlang:demonitor(MRef, [flush]),
-                    dict:erase(CPid, CPMap)
+                    maps:remove(CPid, CPMap)
             end;
         error ->
             % FIXME: this shouldn't happen, should we log or error?
@@ -742,7 +742,7 @@ remove_pid(Pid, Pool) ->
           all_members = AllMembers,
           consumer_to_pid = CPMap,
           stop_mfa = StopMFA} = Pool,
-    case dict:find(Pid, AllMembers) of
+    case maps:find(Pid, AllMembers) of
         {ok, {MRef, free, _Time}} ->
             % remove an unused member
             erlang:demonitor(MRef, [flush]),
@@ -751,7 +751,7 @@ remove_pid(Pid, Pool) ->
             Pool1 = Pool#pool{free_pids = FreePids, free_count = NumFree},
             terminate_pid(PoolName, Pid, StopMFA),
             send_metric(Pool1, killed_free_count, {inc, 1}, counter),
-            Pool1#pool{all_members = dict:erase(Pid, AllMembers)};
+            Pool1#pool{all_members = maps:remove(Pid, AllMembers)};
         {ok, {MRef, CPid, _Time}} ->
             %% remove a member being consumed. No notice is sent to
             %% the consumer.
@@ -760,7 +760,7 @@ remove_pid(Pid, Pool) ->
             terminate_pid(PoolName, Pid, StopMFA),
             send_metric(Pool1, killed_in_use_count, {inc, 1}, counter),
             Pool1#pool{consumer_to_pid = cpmap_remove(Pid, CPid, CPMap),
-                       all_members = dict:erase(Pid, AllMembers)};
+                       all_members = maps:remove(Pid, AllMembers)};
         error ->
             error_logger:error_report({{pool, PoolName}, unknown_pid, Pid,
                                        ?GET_STACKTRACE}),
@@ -771,25 +771,25 @@ remove_pid(Pid, Pool) ->
 -spec store_all_members(pid(),
                         {reference(), free | pid(), {_, _, _}}, p_dict()) -> p_dict().
 store_all_members(Pid, Val = {_MRef, _CPid, _Time}, AllMembers) ->
-    dict:store(Pid, Val, AllMembers).
+    maps:put(Pid, Val, AllMembers).
 
 -spec set_cpid_for_member(pid(), pid(), p_dict()) -> p_dict().
 set_cpid_for_member(MemberPid, CPid, AllMembers) ->
-    dict:update(MemberPid,
+    maps:update_with(MemberPid,
                 fun({MRef, free, Time = {_, _, _}}) ->
                         {MRef, CPid, Time}
                 end, AllMembers).
 
 -spec add_member_to_consumer(pid(), pid(), p_dict()) -> p_dict().
 add_member_to_consumer(MemberPid, CPid, CPMap) ->
-    %% we can't use dict:update here because we need to create the
+    %% we cannot use maps:update_with/3 here because we need to create the
     %% monitor if we aren't already tracking this consumer.
-    case dict:find(CPid, CPMap) of
+    case maps:find(CPid, CPMap) of
         {ok, {MRef, MList}} ->
-            dict:store(CPid, {MRef, [MemberPid | MList]}, CPMap);
+            maps:put(CPid, {MRef, [MemberPid | MList]}, CPMap);
         error ->
             MRef = erlang:monitor(process, CPid),
-            dict:store(CPid, {MRef, [MemberPid]}, CPMap)
+            maps:put(CPid, {MRef, [MemberPid]}, CPMap)
     end.
 
 -spec cull_members_from_pool(#pool{}) -> #pool{}.
@@ -837,7 +837,7 @@ schedule_cull(PoolName, Delay) ->
 
 -spec member_info([pid()], p_dict()) -> [{pid(), member_info()}].
 member_info(Pids, AllMembers) ->
-    [ {P, dict:fetch(P, AllMembers)} || P <- Pids ].
+    [ {P, maps:get(P, AllMembers)} || P <- Pids ].
 
 -spec expired_free_members(Members :: [{pid(), member_info()}],
                            Now :: {_, _, _},
