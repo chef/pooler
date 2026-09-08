@@ -51,7 +51,7 @@ get_id(S) ->
     gen_server:call(S, get_id).
 
 %% @doc In processing this request, the server will sleep for a time
-%% determined by a call to `random:uniform(T)'. Can be useful in
+%% determined by a call to `rand:uniform(T)'. Can be useful in
 %% stress-testing the pool to simulate consumers taking a member out
 %% of the pool for a varied request time.
 do_work(S, T) ->
@@ -93,7 +93,7 @@ init({Type, StartFun}) ->
 handle_call(get_id, _From, State) ->
     {reply, {State#state.type, State#state.id}, State};
 handle_call({do_work, T}, _From, State) ->
-    Sleep = ?RANDOM_UNIFORM(T),
+    Sleep = rand:uniform(T),
     timer:sleep(Sleep),
     {reply, {ok, Sleep}, State};
 handle_call(ping, _From, #state{ping_count = C } = State) ->
