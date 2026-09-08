@@ -1045,7 +1045,7 @@ pooler_bug_test_() ->
                                               free_pids = FreePids} = OldState) ->
                                                   OldState#pool{free_count = FreeCount + 1,
                                                                 max_count = MaxCount + 1,
-                                                                all_members = dict:store(BadPid, {erlang:make_ref(), free, os:timestamp()}, AllMembers),
+                                                                all_members = maps:put(BadPid, {erlang:make_ref(), free, os:timestamp()}, AllMembers),
                                                                 free_pids = [BadPid | FreePids]
                                                                }
                                     end),
