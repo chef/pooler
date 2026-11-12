@@ -935,11 +935,14 @@ maybe_reply({Member, NewPool}) ->
 -spec terminate_pid(atom(), pid(), {atom(), atom(), [term()]}) -> ok.
 terminate_pid(PoolName, Pid, {Mod, Fun, Args}) when is_list(Args) ->
     NewArgs = replace_placeholders(PoolName, Pid, Args),
-    case catch erlang:apply(Mod, Fun, NewArgs) of
-        {'EXIT', _} ->
-            terminate_pid(PoolName, Pid, ?DEFAULT_STOP_MFA);
+    try erlang:apply(Mod, Fun, NewArgs) of
         _Result ->
             ok
+    catch
+        throw:_ ->
+            ok;
+        _:_ ->
+            terminate_pid(PoolName, Pid, ?DEFAULT_STOP_MFA)
     end.
 
 replace_placeholders(Name, Pid, Args) ->

@@ -347,7 +347,7 @@ basic_tests() ->
                fake_metrics:reset_metrics(),
                Pids = [ pooler:take_member(test_pool_1) || _I <- lists:seq(1, 10) ],
                [ pooler:return_member(test_pool_1, P) || P <- Pids ],
-               catch pooler:take_member(bad_pool_name),
+               try pooler:take_member(bad_pool_name) catch _:_ -> ok end,
                %% kill and unused member
                exit(hd(Pids), kill),
                %% kill a used member
@@ -375,7 +375,7 @@ basic_tests() ->
                %% pass a non-zero timeout here to exercise queueing
                Pids = [ pooler:take_member(test_pool_1, 1) || _I <- lists:seq(1, 10) ],
                [ pooler:return_member(test_pool_1, P) || P <- Pids ],
-               catch pooler:take_member(bad_pool_name),
+               try pooler:take_member(bad_pool_name) catch _:_ -> ok end,
                %% kill and unused member
                exit(hd(Pids), kill),
                %% kill a used member
@@ -704,7 +704,7 @@ random_message_test_() ->
              application:start(pooler),
              %% now send some bogus messages
              %% do the call in a throw-away process to avoid timeout error
-             spawn(fun() -> catch gen_server:call(test_pool_1, {unexpected_garbage_msg, 5}) end),
+             spawn(fun() -> try gen_server:call(test_pool_1, {unexpected_garbage_msg, 5}) catch _:_ -> ok end end),
              gen_server:cast(test_pool_1, {unexpected_garbage_msg, 6}),
              whereis(test_pool_1) ! {unexpected_garbage_msg, 7},
              ok
